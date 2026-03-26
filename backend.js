@@ -3,15 +3,14 @@
  * This file handles all Supabase Database, Authentication, and Real-time syncing.
  */
 
-// 1. Initialize Supabase (You will replace these later with keys from Supabase)
 const SUPABASE_URL = 'https://nlsruirhrtmnvcemlcwu.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sc3J1aXJocnRtbnZjZW1sY3d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0ODU4OTIsImV4cCI6MjA5MDA2MTg5Mn0.36PCGVyIyvXCZ28MxoeRTGUDvqW7vHIAMXgqgtPVaT4';
 
-let supabase = null;
+// CHANGED: Renamed variable to dbClient to avoid industry namespace collision
+let dbClient = null;
 
-// We only initialize if the keys are added, preventing errors in your current local tests
 if (SUPABASE_URL && SUPABASE_URL !== 'YOUR_SUPABASE_URL_HERE') {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     console.log('✅ Supabase Backend Initialized');
 } else {
     console.log('⚠️ Running in Local Simulator Mode. Add Supabase keys to backend.js to enable online multi-user mode.');
@@ -19,10 +18,10 @@ if (SUPABASE_URL && SUPABASE_URL !== 'YOUR_SUPABASE_URL_HERE') {
 
 // --- AUTHENTICATION MODULE ---
 async function loginUser(username, password) {
-    if (!supabase) return { success: true }; // Fallback to local admin test if no DB
+    if (!dbClient) return { success: true }; 
     
     try {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await dbClient.auth.signInWithPassword({
             email: username,
             password: password,
         });
@@ -37,9 +36,9 @@ async function loginUser(username, password) {
 
 // --- REAL-TIME DATABASE SYNC MODULE ---
 async function syncAuctionState(roomName, globalState) {
-    if (!supabase) return;
+    if (!dbClient) return;
     
-    const { error } = await supabase
+    const { error } = await dbClient
         .from('auction_state')
         .upsert({ room_name: roomName, state_data: globalState, last_updated: new Date() });
         
@@ -47,32 +46,31 @@ async function syncAuctionState(roomName, globalState) {
 }
 
 async function getAuctionState(roomName) {
-    if (!supabase) return null;
-    const { data, error } = await supabase.from('auction_state').select('state_data').eq('room_name', roomName).single();
+    if (!dbClient) return null;
+    const { data, error } = await dbClient.from('auction_state').select('state_data').eq('room_name', roomName).single();
     if (error) return null;
     return data?.state_data;
 }
 
 async function getAllRooms() {
-    if (!supabase) return [];
-    const { data, error } = await supabase.from('auction_state').select('room_name');
+    if (!dbClient) return [];
+    const { data, error } = await dbClient.from('auction_state').select('room_name');
     if (error) return [];
     return data.map(d => d.room_name);
 }
 
 async function deleteAuctionState(roomName) {
-    if (!supabase) return;
-    await supabase.from('auction_state').delete().eq('room_name', roomName);
+    if (!dbClient) return;
+    await dbClient.from('auction_state').delete().eq('room_name', roomName);
 }
 
 function subscribeToRoom(roomName, callback) {
-    if (!supabase) return null;
-    return supabase.channel(`room_${roomName}`)
+    if (!dbClient) return null;
+    return dbClient.channel(`room_${roomName}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'auction_state', filter: `room_name=eq.${roomName}` }, (payload) => {
             callback(payload.new.state_data);
         })
         .subscribe();
 }
 
-// Export for the HTML file to use
 window.Backend = { loginUser, syncAuctionState, getAuctionState, getAllRooms, deleteAuctionState, subscribeToRoom };
